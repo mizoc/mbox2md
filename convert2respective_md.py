@@ -1,5 +1,12 @@
 #!/usr/bin/python3
+# Author:mizoc
+# License:MIT
+#
+# convert mbox to markdown file
 import sys
+import base64
+import cv2
+import numpy as np
 from email.header import decode_header
 import re
 from pytz import timezone
@@ -13,39 +20,39 @@ def main(filepath):
     mbox = mailbox.mbox(filepath)
     keys = mbox.keys()
     for key in keys:
-        print(
-            f"""
+        string = f"""
 
-#######################################
-No.{key}"""
-        )
+### No.{key}
+"""
 
         mail_data = mbox.get(key)
 
         # date
         mail_date = re.findall("@xxx (.*)$", mail_data.get_from())[0]
-        print(parser.parse(mail_date).astimezone(timezone(TIMEZONE)).strftime("Date(%Z):%Y/%b/%d (%a) %H:%M:%S"))
+        string += parser.parse(mail_date).astimezone(timezone(TIMEZONE)).strftime("> Date(%Z):%Y/%b/%d (%a) %H:%M:%S\n")
 
         # subject
         # print(mail_data)
         if mail_data["Subject"] is None:
-            print("Subject:None")
+            string += "> Subject:None\n"
         else:
             header = decode_header(mail_data["Subject"])
             # if type(header[0][0]) == str:
             if header[0][1] is None:
-                print(f"Subject:{header[0][0]}")
+                string += f"> Subject:{header[0][0]}\n"
             else:
-                print(f"Subject:{header[0][0].decode(header[0][1], 'ignore')}")
+                string += f"> Subject:{header[0][0].decode(header[0][1], 'ignore')}\n"
 
         # mail addr
         try:
-            print(f"From:{re.findall(' <(.*)>', mail_data['From'])[0]}")
+            string += f"> From:{re.findall(' <(.*)>', mail_data['From'])[0]}\n"
         except:
-            print(f"From:{mail_data['from']}")
-        print("#######################################")
+            string += f"> From:{mail_data['from']}\n"
+        string += """
+---
+"""
 
-        i = 0
+        img_num = 0
         for aa_msg in mail_data.walk():
             # print(aa_msg.get_content_type())
 
@@ -60,21 +67,22 @@ No.{key}"""
                         a_text = aa_msg.get_payload(decode=True).decode("cp932", "ignore")
                     else:
                         print("** Cannot decode.Cannot specify charset ***" + msg.get("From"))
-                print(a_text)
+                string += "```\n"
+                string += a_text + "\n"
+                string += "```\n"
 
             # image どうせbase64だろ
             elif "image" in aa_msg.get_content_type():
-                import base64
-                import cv2
-                import numpy as np
-
                 cv2.imwrite(
-                    f"./attachments/{key}-{str(i)}.jpg",
+                    f"./attachments/{key}-{str(img_num)}.jpg",
                     cv2.imdecode(np.frombuffer(base64.b64decode(aa_msg.get_payload()), dtype=np.uint8), cv2.IMREAD_COLOR),
                 )
-                print(f"Attachment:{aa_msg.get_filename()}(./attachments/{key}-{i})")
+                string += f"{aa_msg.get_filename()}:![Attachments](../attachments/{key}-{img_num}.jpg)\n"
 
-                i += 1
+                img_num += 1
+
+        with open(f"./out/{key}.md", encoding="utf-8", mode="w") as f:
+            f.write(string)
 
 
 if __name__ == "__main__":
